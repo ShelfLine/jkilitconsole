@@ -7,6 +7,9 @@
   
   <!-- SheetJS for Excel/CSV parsing -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
   <style>
     /* ============================================================
@@ -710,14 +713,25 @@
 </div>
 
 <!-- ============================================================
-    JSONBIN.IO & APP STATE SCRIPT
+    FIREBASE & APP STATE SCRIPT
     ============================================================ -->
 <script>
   // ==========================================
-  // JSONBIN.IO CONFIGURATION
+  // FIREBASE CONFIGURATION
   // ==========================================
-  const NPOINT_ID = 'https://api.npoint.io/3998c8b365815a2ddde9'; // paste your code here
-  
+  const firebaseConfig = {
+    apiKey: "AIzaSyCPK8qiX8s33wT34hLgdW1rz7xweV5Ixfw",
+    authDomain: "jkilitconsole.firebaseapp.com",
+    databaseURL: "https://jkilitconsole-default-rtdb.firebaseio.com",
+    projectId: "jkilitconsole",
+    storageBucket: "jkilitconsole.firebasestorage.app",
+    messagingSenderId: "143296712377",
+    appId: "1:143296712377:web:74b06bb69679acf5845568"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const dbRef = firebase.database().ref('jkil_console');
+
   let appState = {
     'Lagoon Project': { total: 0, desk: 0, lap: 0, machines: [] },
     'Mahalaxmi Vestabule': { total: 0, desk: 0, lap: 0, machines: [] },
@@ -745,36 +759,27 @@
 
   async function loadFromCloud() {
     try {
-      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}/latest`, {
-        headers: { 'X-Master-Key': JSONBIN_KEY }
-      });
-      const result = await response.json();
-      if (result && result.record) {
-        if (result.record.inventory_state) appState = result.record.inventory_state;
-        if (result.record.printer_readings) printerReadings = result.record.printer_readings;
-        if (result.record.visit_plans) visitPlans = result.record.visit_plans;
+      const snapshot = await dbRef.once('value');
+      const val = snapshot.val();
+      if (val) {
+        if (val.inventory_state) appState = val.inventory_state;
+        if (val.printer_readings) printerReadings = val.printer_readings;
+        if (val.visit_plans) visitPlans = val.visit_plans;
       }
     } catch (err) {
-      console.error('Error loading from cloud:', err);
+      console.error('Error loading from Firebase:', err);
     }
   }
 
   async function saveState() {
     try {
-      await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Master-Key': JSONBIN_KEY
-        },
-        body: JSON.stringify({
-          inventory_state: appState,
-          printer_readings: printerReadings,
-          visit_plans: visitPlans
-        })
+      await dbRef.set({
+        inventory_state: appState,
+        printer_readings: printerReadings,
+        visit_plans: visitPlans
       });
     } catch (err) {
-      console.error('Error saving to cloud:', err);
+      console.error('Error saving to Firebase:', err);
     }
   }
 
@@ -1040,7 +1045,7 @@
     document.getElementById('counter-a3c').value = '';
     document.getElementById('counter-note').value = '';
 
-    alert("Printer counter report successfully saved to cloud!");
+    alert("Printer counter report successfully saved to Firebase!");
   }
 
   function renderCalendarVisits() {
@@ -1351,7 +1356,7 @@
       }
     }, 300);
 
-    alert("Inventory record successfully saved to cloud!");
+    alert("Inventory record successfully saved to Firebase!");
   }
 
   let currentImportTarget = "";
@@ -1427,7 +1432,7 @@
       if(document.getElementById('view-site-details').classList.contains('active')) {
         openSiteDetails(currentImportTarget);
       }
-      alert(`Successfully imported ${parsedMachines.length} items to cloud into ${currentImportTarget}!`);
+      alert(`Successfully imported ${parsedMachines.length} items to Firebase into ${currentImportTarget}!`);
       event.target.value = "";
     };
     reader.readAsArrayBuffer(file);
