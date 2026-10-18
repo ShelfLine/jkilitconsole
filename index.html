@@ -1295,6 +1295,14 @@
     const idx = parseInt(document.getElementById('edit-record-index').value);
     const targetSite = document.getElementById('edit-location').value;
 
+    // Safety check: ensure target site object exists in appState
+    if (!appState[targetSite]) {
+      appState[targetSite] = { total: 0, desk: 0, lap: 0, machines: [] };
+    }
+    if (!appState[targetSite].machines) {
+      appState[targetSite].machines = [];
+    }
+
     const record = {
       officeArea: document.getElementById('edit-officearea').value,
       userName: document.getElementById('edit-username').value || "Unnamed",
@@ -1324,12 +1332,12 @@
     };
 
     if (idx === -1) {
-      if(!appState[targetSite]) appState[targetSite] = { total: 0, desk: 0, lap: 0, machines: [] };
       appState[targetSite].machines.push(record);
     } else {
       if (activeSiteContext !== targetSite) {
-        appState[activeSiteContext].machines.splice(idx, 1);
-        if(!appState[targetSite]) appState[targetSite] = { total: 0, desk: 0, lap: 0, machines: [] };
+        if (appState[activeSiteContext] && appState[activeSiteContext].machines) {
+          appState[activeSiteContext].machines.splice(idx, 1);
+        }
         appState[targetSite].machines.push(record);
       } else {
         appState[activeSiteContext].machines[idx] = record;
@@ -1338,9 +1346,11 @@
 
     for (const sName in appState) {
       const s = appState[sName];
-      s.total = s.machines.length;
-      s.desk = s.machines.filter(m => (m.systemType || '').toLowerCase().includes('desktop')).length;
-      s.lap = s.machines.filter(m => (m.systemType || '').toLowerCase().includes('laptop')).length;
+      if (s && s.machines) {
+        s.total = s.machines.length;
+        s.desk = s.machines.filter(m => (m.systemType || '').toLowerCase().includes('desktop')).length;
+        s.lap = s.machines.filter(m => (m.systemType || '').toLowerCase().includes('laptop')).length;
+      }
     }
 
     await saveState();
