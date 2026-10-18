@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - JKIL IT Asset Console</title>
+  
+  <!-- SheetJS for Excel/CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <style>
+    /* ============================================================
+        VARIABLES & BASE SETUP
+        ============================================================ */
+    :root {
+      --bg-page: #f8fafc;
+      --bg-surface: #ffffff;
+      --bg-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-sidebar: #94a3b8;
+      --text-sidebar-active: #ffffff;
+      --border: #e2e8f0;
+      
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --accent: #f97316;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    * { box-sizing: border-box; }
+    
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: var(--bg-page);
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    a { text-decoration: none; color: inherit; cursor: pointer; }
+    button { cursor: pointer; font-family: inherit; border: none; background: none; }
+    h1, h2, h3, p { margin: 0; }
+
+    /* ============================================================
+        LOGIN GATE OVERLAY
+        ============================================================ */
+    #login-gate {
+      position: fixed;
+      inset: 0;
+      background: #0f172a;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #login-gate.hidden { display: none; }
+    
+    .login-box {
+      background: var(--bg-surface);
+      padding: 2.5rem;
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+    .login-box h2 { font-size: 1.25rem; font-weight: 700; color: var(--text-main); }
+    .login-box p { font-size: 0.85rem; color: var(--text-muted); }
+    .login-error { color: var(--danger); font-size: 0.8rem; display: none; font-weight: 600; }
+    
+    /* ============================================================
+        LAYOUT SHELL & SIDEBAR
+        ============================================================ */
+    .shell { display: flex; height: 100vh; }
+
+    .sidebar {
+      width: 260px; background: var(--bg-sidebar); color: var(--text-sidebar);
+      display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0;
+    }
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-thumb { background: #334155; }
+
+    .side-brand { padding: 1.5rem; border-bottom: 1px solid #334155; }
+    .side-brand strong { color: white; display: block; font-size: 0.95rem; }
+    .side-brand span { font-size: 0.75rem; }
+
+    .nav { padding: 1rem 0.5rem; display: flex; flex-direction: column; gap: 4px; }
+    .nav-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 1rem 1rem 0.25rem; color: #64748b; font-weight: 700; }
+    .nav-item { padding: 0.5rem 1rem; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 12px; font-size: 0.85rem; transition: all 0.2s; }
+    .nav-item svg { width: 16px; height: 16px; opacity: 0.7; flex-shrink: 0; }
+    .nav-item:hover { background: #334155; color: white; }
+    .nav-item.active { background: rgba(37, 99, 235, 0.15); color: #60a5fa; font-weight: 600; border-left: 3px solid #60a5fa; }
+    .nav-item.active svg { opacity: 1; color: #60a5fa; }
+    
+    .side-foot { margin-top: auto; padding: 1rem; border-top: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; }
+
+    /* ============================================================
+        MAIN CONTENT & TOPBAR
+        ============================================================ */
+    .main { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+
+    .topbar {
+      background: var(--bg-surface); height: 64px; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
+    }
+    .titles h1 { font-size: 1.25rem; font-weight: 700; }
+    .titles p { font-size: 0.8rem; color: var(--text-muted); }
+    
+    .top-actions { display: flex; align-items: center; gap: 1rem; }
+    .btn { padding: 0.5rem 1rem; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; justify-content: center;}
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+    .btn-ghost:hover { background: var(--bg-page); }
+
+    /* ============================================================
+        SPA ROUTING (VIEWS)
+        ============================================================ */
+    .content { padding: 2rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+    
+    .view-section { display: none; animation: fadeIn 0.3s ease-in-out; }
+    .view-section.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ============================================================
+        DASHBOARD CONTENT
+        ============================================================ */
+    .hero { background: linear-gradient(135deg, #1e293b, #0f172a); color: white; border-radius: var(--radius-lg); padding: 2rem; display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .hero h2 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    .hero p { color: #94a3b8; font-size: 0.9rem; }
+    .hero .right { display: flex; gap: 1rem; }
+
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .kpi { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; display: flex; align-items: center; gap: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+    .kpi-ico { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--bg-page); }
+    .kpi-ico svg { width: 24px; height: 24px; }
+    .kpi .txt { flex: 1; }
+    .kpi .v { font-size: 1.5rem; font-weight: 700; transition: all 0.3s; }
+    .kpi .k { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; }
+    .kpi .s { font-size: 0.75rem; color: var(--text-muted); }
+    
+    .t-blue .kpi-ico { color: var(--primary); background: #eff6ff; }
+    .t-green .kpi-ico { color: var(--success); background: #ecfdf5; }
+
+    .site-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .site-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.5rem; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 1rem; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; }
+    .site-card:hover { transform: translateY(-2px); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .site-card .top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .site-card .badge-key { background: #e2e8f0; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #475569; }
+    .site-card h3 { font-size: 1rem; margin: 0.5rem 0 0.25rem; }
+    .site-card .ho { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; }
+    .site-card .big { text-align: right; }
+    .site-card .big b { font-size: 1.75rem; display: block; line-height: 1; }
+    .site-card .big span { font-size: 0.75rem; color: var(--text-muted); }
+
+    .minibar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--border); width: 100%; }
+    .minibar i { height: 100%; transition: width 0.5s ease; }
+    .foot-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+    .tag { font-size: 0.7rem; padding: 2px 8px; border-radius: 12px; font-weight: 500; border: 1px solid; }
+    .tag.n { border-color: var(--border); color: var(--text-muted); }
+
+    /* Tables & Cards */
+    .panel { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin-bottom: 2rem; }
+    .panel-head { padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .panel-head p { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; }
+    
+    .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem; }
+    th { background: #f8fafc; padding: 1rem; font-weight: 600; color: var(--text-muted); border-bottom: 1px solid var(--border); white-space: nowrap;}
+    td { padding: 1rem; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle;}
+    tr:last-child td { border-bottom: none; }
+    .user { font-weight: 600; color: var(--text-main); }
+    
+    .back-nav { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 1.5rem; color: var(--text-muted); font-weight: 600; font-size: 0.9rem; cursor: pointer; border: none; background: none; padding: 0;}
+    .back-nav:hover { color: var(--primary); }
+
+    /* Printer Cards UI */
+    .printer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .printer-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; flex-direction: column; gap: 1rem; }
+    .printer-card-top { display: flex; align-items: flex-start; justify-content: space-between; }
+    .printer-ico { width: 40px; height: 40px; border-radius: var(--radius-sm); background: #eff6ff; color: var(--primary); display: flex; align-items: center; justify-content: center; }
+    .printer-ico svg { width: 20px; height: 20px; }
+    .printer-badge { background: #f3e8ff; color: #7e22ce; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; }
+    .printer-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; background: var(--bg-page); padding: 0.75rem; border-radius: var(--radius-sm); text-align: center; }
+    .printer-stats .lbl { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+    .printer-stats .val { font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-top: 2px; }
+
+    /* ============================================================
+        VISUAL CALENDAR PLANNER STYLES
+        ============================================================ */
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; background: var(--border); }
+    .cal-header { background: #f8fafc; padding: 0.75rem; text-align: center; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+    .cal-day { background: var(--bg-surface); min-height: 110px; padding: 0.75rem; display: flex; flex-direction: column; gap: 6px; cursor: pointer; transition: background 0.15s; position: relative; }
+    .cal-day:hover { background: #f8fafc; }
+    .cal-day.weekend { background: #fafafa; color: var(--text-muted); }
+    .cal-day.other-month { opacity: 0.4; }
+    .cal-day-num { font-size: 0.85rem; font-weight: 600; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+    .cal-day.today .cal-day-num { background: var(--primary); color: white; }
+    .visit-pill { background: #eff6ff; color: var(--primary); border: 1px solid #dbeafe; font-size: 0.7rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; }
+    .visit-pill button { color: var(--danger); font-weight: bold; font-size: 0.75rem; padding: 0 2px; }
+
+    /* ============================================================
+        DRAWER COMPONENT (SLIDE OUT EDIT & NEW ENTRY FORM)
+        ============================================================ */
+    .scrim { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); z-index: 900; opacity: 0; visibility: hidden; transition: 0.3s; }
+    .scrim.active { opacity: 1; visibility: visible; }
+    .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 600px; max-width: 100vw; background: var(--bg-surface); z-index: 1000; transform: translateX(100%); transition: transform 0.3s ease; display: flex; flex-direction: column; box-shadow: -4px 0 15px rgba(0,0,0,0.1); }
+    .drawer.active { transform: translateX(0); }
+    .drawer-head { padding: 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .drawer-head h3 { font-size: 1.25rem; font-weight: 700; margin: 0; }
+    .drawer-body { padding: 1.5rem; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1.5rem; }
+    .drawer-foot { padding: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 1rem; background: #f8fafc;}
+    .form-section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem; font-weight: 700;}
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.35rem; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
+    .form-group input, .form-group select { padding: 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 0.85rem; font-family: inherit;}
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+  </style>
+</head>
+<body>
+
+<!-- ============================================================
+    SECURE LOGIN GATE MODAL
+    ============================================================ -->
+<div id="login-gate">
+  <div class="login-box">
+    <div>
+      <h2>JKIL IT Asset Console</h2>
+      <p>Enter your credentials to access the dashboard.</p>
+    </div>
+    <div class="form-group">
+      <label>Login ID</label>
+      <input type="text" id="login-user" placeholder="Enter Login ID (admin or user)">
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="login-pass" placeholder="Enter Password" onkeypress="handleLoginKey(event)">
+    </div>
+    <div class="login-error" id="login-error">Invalid Login ID or Password.</div>
+    <button class="btn btn-primary" onclick="attemptLogin()">Login to Console</button>
+  </div>
+</div>
+
+<!-- Hidden File Input for Import Functionality -->
+<input type="file" id="global-importer" style="display: none;" accept=".csv, .xlsx, .xls">
+
+<!-- ============================================================
+    EDIT / NEW ENTRY DRAWER & SCRIM (OVERLAY)
+    ============================================================ -->
+<div class="scrim" id="drawer-scrim" onclick="closeDrawer()"></div>
+<aside class="drawer" id="edit-drawer">
+  <div class="drawer-head">
+    <h3 id="drawerTitle">Add / Edit Inventory Record</h3>
+    <button class="icon-btn" onclick="closeDrawer()"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"></path></svg></button>
+  </div>
+  <div class="drawer-body">
+    <input type="hidden" id="edit-record-index" value="-1">
+    
+    <div>
+      <div class="form-section-title">Core Allocation &amp; Identity</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Office / Area</label><input type="text" id="edit-officearea" placeholder="Office / Area"></div>
+        <div class="form-group"><label>Department</label><input type="text" id="edit-dept" placeholder="IT / Accounts / Engineering"></div>
+        <div class="form-group full"><label>User Name</label><input type="text" id="edit-username" placeholder="Employee Name"></div>
+        <div class="form-group full"><label>Location</label>
+          <select id="edit-location">
+            <option>Lagoon Project</option>
+            <option>Mahalaxmi Vestabule</option>
+            <option>MML-7A-CA48-UG</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="form-section-title">System Specs &amp; Status</div>
+      <div class="form-grid">
+        <div class="form-group"><label>System Type Desktop \ Laptop</label>
+          <input type="text" id="edit-systemtype" placeholder="e.g. Desktop or Laptop">
+        </div>
+        <div class="form-group"><label>Status</label>
+          <select id="edit-status"><option>Working</option><option>Not Working</option><option>Under Repair</option></select>
+        </div>
+        <div class="form-group"><label>Model No</label><input type="text" id="edit-sysmodel" placeholder="Model No"></div>
+        <div class="form-group"><label>Serial Number</label><input type="text" id="edit-sysserial" placeholder="Serial Number"></div>
+        <div class="form-group"><label>Processor</label><input type="text" id="edit-processor" placeholder="Processor"></div>
+        <div class="form-group"><label>Ram</label><input type="text" id="edit-ram" placeholder="Ram"></div>
+        <div class="form-group full"><label>Harddisk</label><input type="text" id="edit-hdd" placeholder="Harddisk"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="form-section-title">Peripherals &amp; Security</div>
+      <div class="form-grid">
+        <div class="form-group"><label>K7 Antivirus Installed</label>
+          <select id="edit-k7"><option value="Yes">Yes</option><option value="No">No</option></select>
+        </div>
+        <div class="form-group"><label>Remark</label><input type="text" id="edit-remark" placeholder="Remark / Note"></div>
+
+        <div class="form-group"><label>Printer Model</label><input type="text" id="edit-printermodel" placeholder="e.g. Canon iR 3120"></div>
+        <div class="form-group"><label>Printer Serial Number</label><input type="text" id="edit-printerserial"></div>
+
+        <div class="form-group"><label>UPS Model</label><input type="text" id="edit-upsmodel"></div>
+        <div class="form-group"><label>UPS Serial Number</label><input type="text" id="edit-upsserial"></div>
+
+        <div class="form-group"><label>Xerox Model</label><input type="text" id="edit-xeroxmodel"></div>
+        <div class="form-group"><label>Xerox Serial Number</label><input type="text" id="edit-xeroxserial"></div>
+
+        <div class="form-group"><label>Firewall Model</label><input type="text" id="edit-firewallmodel"></div>
+        <div class="form-group"><label>Firewall Serial Number</label><input type="text" id="edit-firewallserial"></div>
+
+        <div class="form-group"><label>Scanner Model</label><input type="text" id="edit-scannermodel"></div>
+        <div class="form-group"><label>Scanner Serial Number</label><input type="text" id="edit-scannerserial"></div>
+
+        <div class="form-group"><label>Plotter Model</label><input type="text" id="edit-plottermodel"></div>
+        <div class="form-group"><label>Plotter Serial Number</label><input type="text" id="edit-plotterserial"></div>
+      </div>
+    </div>
+
+  </div>
+  <div class="drawer-foot">
+    <button class="btn btn-ghost" onclick="closeDrawer()">Cancel</button>
+    <button class="btn btn-primary" onclick="saveDrawerData()">Save Record</button>
+  </div>
+</aside>
+
+<div class="shell" id="shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="side-brand">
+      <strong>IT Helpdesk &amp; Assets</strong>
+      <span>J. Kumar Infraprojects Ltd.</span>
+    </div>
+    <nav class="nav" id="sidebar-nav">
+      <div class="nav-label">Overview</div>
+      <a class="nav-item active" data-target="view-dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg> Dashboard</a>
+      
+      <div class="nav-label">Sites</div>
+      <a class="nav-item" data-site="Lagoon Project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> Lagoon Project</a>
+      <a class="nav-item" data-site="Mahalaxmi Vestabule"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> Mahalaxmi Vestabule</a>
+      <a class="nav-item" data-site="MML-7A-CA48-UG"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> MML-7A-CA48-UG</a>
+
+      <div class="nav-label">Reports</div>
+      <a class="nav-item" data-target="view-k7-status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg> K7 Status</a>
+      <a class="nav-item" data-target="view-printer-count"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg> Printer Counters</a>
+      <a class="nav-item" data-target="view-visit-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg> Visit plan</a>
+    </nav>
+    <div class="side-foot">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div style="background: #cbd5e1; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#0f172a; font-weight:bold; font-size:11px;" id="user-initials">JM</div>
+        <div><b style="color:white; display:block; font-size:0.75rem;" id="user-display-name">Jagdish Moolya</b><span style="color:var(--text-sidebar); font-size:0.7rem;" id="user-role-lbl">Admin</span></div>
+      </div>
+      <button class="btn btn-ghost" style="color: #ef4444; border:none; padding:4px 8px; font-size:0.75rem;" onclick="logout()">Logout</button>
+    </div>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <main class="main" id="main">
+    <header class="topbar">
+      <div class="titles">
+        <p id="top-subtitle">Overview</p>
+        <h1 id="top-title">Dashboard</h1>
+      </div>
+      <div class="top-actions">
+        <button class="btn btn-primary admin-only" id="btn-add-inventory" onclick="openNewRecordDrawer()">+ Add Inventory Item</button>
+        <button class="btn btn-ghost" onclick="triggerExport('All Sites Master')">Export Master</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- VIEW 1: DASHBOARD -->
+      <div id="view-dashboard" class="view-section active">
+        <section class="hero">
+          <div>
+            <div style="color:#94a3b8; font-size:0.85rem; margin-bottom:8px;" id="hero-greeting">Good evening, Jagdish</div>
+            <h2>IT Asset Inventory Console</h2>
+            <p>Manage machines, hardware serials, peripherals, and employee allocations across all sites.</p>
+          </div>
+          <div class="right">
+            <button class="btn btn-ghost admin-only" onclick="clearAllData()">Clear Data</button>
+          </div>
+        </section>
+
+        <div class="kpis">
+          <div class="kpi t-blue">
+            <div class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg></div>
+            <div class="txt"><div class="k">Total Systems</div><div class="v" id="kpi-total">0</div><div class="s" id="kpi-total-sub">0 desktop · 0 laptop</div></div>
+          </div>
+          <div class="kpi t-green">
+            <div class="kpi-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
+            <div class="txt"><div class="k">Active Locations</div><div class="v" id="kpi-locs">3 Sites</div><div class="s">Lagoon, Mahalaxmi, MML-7A</div></div>
+          </div>
+        </div>
+
+        <div class="site-grid" id="main-site-grid">
+          <div class="site-card" onclick="openSiteDetails('Lagoon Project')">
+            <div class="top">
+              <div><span class="badge-key">Lagoon</span><h3>Lagoon Project</h3><div class="ho">Lagoon Project</div></div>
+              <div class="big"><b id="card-lagoon-total">0</b><span>systems</span></div>
+            </div>
+            <div class="minibar"><i id="card-lagoon-bar-desk" style="width:0%;background:#2563eb"></i><i id="card-lagoon-bar-lap" style="width:0%;background:#f97316"></i></div>
+            <div class="foot-row"><span class="tag n" id="card-lagoon-desk">0 desktop</span><span class="tag n" id="card-lagoon-lap">0 laptop</span></div>
+            <div style="display:flex; gap:8px; margin-top:1rem; border-top:1px solid var(--border); padding-top:1rem;">
+              <button class="btn btn-ghost admin-only" style="flex:1; padding:0.4rem; font-size:0.75rem;" onclick="event.stopPropagation(); triggerImport('Lagoon Project')">Import</button>
+              <button class="btn btn-ghost" style="flex:1; padding:0.4rem; font-size:0.75rem;" onclick="event.stopPropagation(); triggerExport('Lagoon Project')">Export</button>
+            </div>
+          </div>
+          
+          <div class="site-card" onclick="openSiteDetails('Mahalaxmi Vestabule')">
+            <div class="top">
+              <div><span class="badge-key">MAHALAXMI</span><h3>Mahalaxmi Vestabule</h3><div class="ho">Mahalaxmi Vestabule</div></div>
+              <div class="big"><b id="card-mahalaxmi-total">0</b><span>systems</span></div>
+            </div>
+            <div class="minibar"><i id="card-mahalaxmi-bar-desk" style="width:0%;background:#2563eb"></i><i id="card-mahalaxmi-bar-lap" style="width:0%;background:#f97316"></i></div>
+            <div class="foot-row"><span class="tag n" id="card-mahalaxmi-desk">0 desktop</span><span class="tag n" id="card-mahalaxmi-lap">0 laptop</span></div>
+            <div style="display:flex; gap:8px; margin-top:1rem; border-top:1px solid var(--border); padding-top:1rem;">
+              <button class="btn btn-ghost admin-only" style="flex:1; padding:0.4rem; font-size:0.75rem;" onclick="event.stopPropagation(); triggerImport('Mahalaxmi Vestabule')">Import</button>
+              <button class="btn btn-ghost" style="flex:1; padding:0.4rem; font-size:0.75rem;" onclick="event.stopPropagation(); triggerExport('Mahalaxmi Vestabule')">Export</button>
+            </div>
+          </div>
+
+          <div class="site-card" onclick="openSiteDetails('MML-7A-CA48-UG')">
+            <div class="top">
+              <div><span class="badge-key">MML7A</span><h3>MML-7A-CA48-UG</h3><div class="ho">MML-7A-CA48-UG</div></div>
+              <div class="big"><b id="card-mml-total">0</b><span>systems</span></div>
+            </div>
+            <div class="minibar"><i id="card-mml-bar-desk" style="width:0%;background:#2563eb"></i><i id="card-mml-bar-lap" style="width:0%;background:#f97316"></i></div>
+            <div class="foot-row"><span class="tag n" id="card-mml-desk">0 desktop</span><span class="tag n" id="card-mml-lap">0 laptop</span></div>
+            <div style="display:flex; gap:8px; margin-top:1rem; border-top:1px solid var(--border); padding-top:1rem;">
+              <button class="btn btn-ghost admin-only" style="flex:1; padding:0.4rem; font-size:0.75rem;" onclick="event.stopPropagation(); triggerImport('MML-7A-CA48-UG')">Import</button>
+              <button class="btn btn-ghost" style="flex:1; padding:0.4rem; font-size:0.75rem;" onclick="event.stopPropagation(); triggerExport('MML-7A-CA48-UG')">Export</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 2: K7 STATUS REPORT -->
+      <div id="view-k7-status" class="view-section">
+        <button class="back-nav" onclick="switchView('view-dashboard', 'Dashboard', 'Overview')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg> Back to Dashboard
+        </button>
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>K7 Antivirus Installation Report</h2>
+              <p>Site-wise summary of K7 Antivirus deployments</p>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Site / Location</th>
+                  <th class="num">Total Systems</th>
+                  <th class="num">K7 Installed (Yes)</th>
+                  <th class="num">K7 Not Installed (No)</th>
+                  <th class="num">Installation Rate</th>
+                </tr>
+              </thead>
+              <tbody id="k7-report-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 3: PRINTER COUNT REPORT -->
+      <div id="view-printer-count" class="view-section">
+        <button class="back-nav" onclick="switchView('view-dashboard', 'Dashboard', 'Overview')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg> Back to Dashboard
+        </button>
+        
+        <div style="margin-bottom: 2rem;">
+          <h2 style="font-size:1.5rem; font-weight:700; margin-bottom:4px;">Printer Counter Reports</h2>
+          <p style="color:var(--text-muted); font-size:0.85rem;">Monthly meter readings and report sheets for printing devices.</p>
+        </div>
+
+        <div class="printer-grid" id="printer-cards-container"></div>
+
+        <div class="panel admin-only" id="printer-form-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Log a counter report</h3>
+              <p>Enter monthly meter readings for A4/A3 Black &amp; White and Colour counts</p>
+            </div>
+          </div>
+          <div style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1.5rem;">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Reporting Month</label>
+                <input type="text" id="counter-month" value="October 2026">
+              </div>
+              <div class="form-group">
+                <label>Select Printer Unit</label>
+                <select id="counter-printer-select">
+                  <option value="Canon iR 3120">Canon iR 3120 - MML7A-CA-48 -YEB04946</option>
+                  <option value="Canon iR C3226">Canon iR C3226 - MML7A-CA-48 -32V04194</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>A4 Black/White</label>
+                <input type="text" id="counter-a4bw" placeholder="e.g. 12450">
+              </div>
+              <div class="form-group">
+                <label>A4 Colour</label>
+                <input type="text" id="counter-a4c" placeholder="e.g. 3400">
+              </div>
+              <div class="form-group">
+                <label>A3 Black/White</label>
+                <input type="text" id="counter-a3bw" placeholder="e.g. 1200">
+              </div>
+              <div class="form-group">
+                <label>A3 Colour</label>
+                <input type="text" id="counter-a3c" placeholder="e.g. 450">
+              </div>
+              <div class="form-group full">
+                <label>Note / Remarks</label>
+                <input type="text" id="counter-note" placeholder="Optional notes or meter reading details...">
+              </div>
+            </div>
+            <div>
+              <button class="btn btn-primary" onclick="savePrinterReading()">Save Counter Reading</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 4: VISIT PLANNER (CALENDAR VIEW) -->
+      <div id="view-visit-plan" class="view-section">
+        <button class="back-nav" onclick="switchView('view-dashboard', 'Dashboard', 'Overview')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg> Back to Dashboard
+        </button>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+          <div>
+            <h2 style="font-size:1.5rem; font-weight:700; margin-bottom:4px;">Visit Planner</h2>
+            <p style="color:var(--text-muted); font-size:0.85rem;">Oct 2026 · 25 working days · Sundays and 2nd &amp; 4th Saturdays off</p>
+          </div>
+          <button class="btn btn-primary admin-only" onclick="openVisitModal()">+ Plan visit</button>
+        </div>
+
+        <div class="panel">
+          <div style="padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="font-size: 1.1rem; font-weight: 700;">Oct 2026</h3>
+            <span style="font-size: 0.8rem; color: var(--text-muted);" id="visit-count-summary">0 visits planned</span>
+          </div>
+          
+          <div class="calendar-grid">
+            <div class="cal-header">Mon</div>
+            <div class="cal-header">Tue</div>
+            <div class="cal-header">Wed</div>
+            <div class="cal-header">Thu</div>
+            <div class="cal-header">Fri</div>
+            <div class="cal-header" style="color: var(--warning);">Sat</div>
+            <div class="cal-header" style="color: var(--danger);">Sun</div>
+
+            <!-- Week 1 -->
+            <div class="cal-day other-month"><div class="cal-day-num">28</div></div>
+            <div class="cal-day other-month"><div class="cal-day-num">29</div></div>
+            <div class="cal-day other-month"><div class="cal-day-num">30</div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-01')"><div class="cal-day-num">1</div><div id="pills-2026-10-01"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-02')"><div class="cal-day-num">2</div><div id="pills-2026-10-02"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-03')"><div class="cal-day-num">3</div><div id="pills-2026-10-03"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-04')"><div class="cal-day-num">4</div><div style="color:var(--danger); font-size:0.75rem; margin-top:4px;">Sunday</div><div id="pills-2026-10-04"></div></div>
+
+            <!-- Week 2 -->
+            <div class="cal-day" onclick="promptVisitDate('2026-10-05')"><div class="cal-day-num">5</div><div id="pills-2026-10-05"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-06')"><div class="cal-day-num">6</div><div id="pills-2026-10-06"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-07')"><div class="cal-day-num">7</div><div id="pills-2026-10-07"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-08')"><div class="cal-day-num">8</div><div id="pills-2026-10-08"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-09')"><div class="cal-day-num">9</div><div id="pills-2026-10-09"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-10')"><div class="cal-day-num">10</div><div style="color:var(--text-muted); font-size:0.7rem; margin-top:2px;">2nd Saturday</div><div id="pills-2026-10-10"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-11')"><div class="cal-day-num">11</div><div style="color:var(--danger); font-size:0.75rem; margin-top:4px;">Sunday</div><div id="pills-2026-10-11"></div></div>
+
+            <!-- Week 3 -->
+            <div class="cal-day" onclick="promptVisitDate('2026-10-12')"><div class="cal-day-num">12</div><div id="pills-2026-10-12"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-13')"><div class="cal-day-num">13</div><div id="pills-2026-10-13"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-14')"><div class="cal-day-num">14</div><div id="pills-2026-10-14"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-15')"><div class="cal-day-num">15</div><div id="pills-2026-10-15"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-16')"><div class="cal-day-num">16</div><div id="pills-2026-10-16"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-17')"><div class="cal-day-num">17</div><div id="pills-2026-10-17"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-18')"><div class="cal-day-num">18</div><div style="color:var(--danger); font-size:0.75rem; margin-top:4px;">Sunday</div><div id="pills-2026-10-18"></div></div>
+
+            <!-- Week 4 -->
+            <div class="cal-day" onclick="promptVisitDate('2026-10-19')"><div class="cal-day-num">19</div><div id="pills-2026-10-19"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-20')"><div class="cal-day-num">20</div><div id="pills-2026-10-20"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-21')"><div class="cal-day-num">21</div><div id="pills-2026-10-21"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-22')"><div class="cal-day-num">22</div><div id="pills-2026-10-22"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-23')"><div class="cal-day-num">23</div><div id="pills-2026-10-23"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-24')"><div class="cal-day-num">24</div><div style="color:var(--text-muted); font-size:0.7rem; margin-top:2px;">4th Saturday</div><div id="pills-2026-10-24"></div></div>
+            <div class="cal-day weekend" onclick="promptVisitDate('2026-10-25')"><div class="cal-day-num">25</div><div style="color:var(--danger); font-size:0.75rem; margin-top:4px;">Sunday</div><div id="pills-2026-10-25"></div></div>
+
+            <!-- Week 5 -->
+            <div class="cal-day" onclick="promptVisitDate('2026-10-26')"><div class="cal-day-num">26</div><div id="pills-2026-10-26"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-27')"><div class="cal-day-num">27</div><div id="pills-2026-10-27"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-28')"><div class="cal-day-num">28</div><div id="pills-2026-10-28"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-29')"><div class="cal-day-num">29</div><div id="pills-2026-10-29"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-30')"><div class="cal-day-num">30</div><div id="pills-2026-10-30"></div></div>
+            <div class="cal-day" onclick="promptVisitDate('2026-10-31')"><div class="cal-day-num">31</div><div id="pills-2026-10-31"></div></div>
+            <div class="cal-day other-month"><div class="cal-day-num">1</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW 5: SPECIFIC SITE DETAILS -->
+      <div id="view-site-details" class="view-section">
+        <button class="back-nav" onclick="switchView('view-dashboard', 'Dashboard', 'Overview')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg> Back to Dashboard
+        </button>
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2 id="dynamic-site-name">Site Name</h2>
+              <p id="dynamic-site-count">Loading machine data...</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button class="btn btn-primary admin-only" onclick="openNewRecordDrawerForSite()">+ Add Item</button>
+              <button class="btn btn-ghost" onclick="triggerExport(document.getElementById('dynamic-site-name').textContent)">Export Site Data</button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Sr.No</th>
+                  <th>User Name</th>
+                  <th>Location</th>
+                  <th>Department</th>
+                  <th>System Type Desktop \ Laptop</th>
+                  <th>Model No</th>
+                  <th>Serial Number</th>
+                  <th>Printer Model</th>
+                  <th>Status</th>
+                  <th>K7 Antivirus Installed</th>
+                  <th>Remark</th>
+                  <th>Office / Area</th>
+                  <th style="text-align: right;" class="admin-only-cell">Action</th>
+                </tr>
+              </thead>
+              <tbody id="dynamic-site-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<!-- ============================================================
+    ROUTER & STATE SCRIPT
+    ============================================================ -->
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('jkil_logged_in') === 'true') {
+      document.getElementById('login-gate').classList.add('hidden');
+      applyRoleUI();
+      renderDashboard();
+    }
+  });
+
+  function attemptLogin() {
+    const user = document.getElementById('login-user').value.trim();
+    const pass = document.getElementById('login-pass').value.trim();
+    const err = document.getElementById('login-error');
+
+    if (user === 'admin' && pass === '8451') {
+      localStorage.setItem('jkil_logged_in', 'true');
+      localStorage.setItem('jkil_user_role', 'admin');
+      document.getElementById('login-gate').classList.add('hidden');
+      err.style.display = 'none';
+      applyRoleUI();
+      renderDashboard();
+    } else if (user === 'user' && pass === '123') {
+      localStorage.setItem('jkil_logged_in', 'true');
+      localStorage.setItem('jkil_user_role', 'user');
+      document.getElementById('login-gate').classList.add('hidden');
+      err.style.display = 'none';
+      applyRoleUI();
+      renderDashboard();
+    } else {
+      err.style.display = 'block';
+    }
+  }
+
+  function handleLoginKey(e) {
+    if (e.key === 'Enter') attemptLogin();
+  }
+
+  function logout() {
+    localStorage.removeItem('jkil_logged_in');
+    localStorage.removeItem('jkil_user_role');
+    document.getElementById('login-gate').classList.remove('hidden');
+    document.getElementById('login-user').value = '';
+    document.getElementById('login-pass').value = '';
+  }
+
+  function applyRoleUI() {
+    const role = localStorage.getItem('jkil_user_role') || 'admin';
+    const adminElements = document.querySelectorAll('.admin-only');
+    const adminCells = document.querySelectorAll('.admin-only-cell');
+
+    if (role === 'user') {
+      adminElements.forEach(el => el.style.display = 'none');
+      adminCells.forEach(el => el.style.display = 'none');
+      document.getElementById('user-initials').textContent = 'US';
+      document.getElementById('user-display-name').textContent = 'Standard User';
+      document.getElementById('user-role-lbl').textContent = 'Viewer';
+      document.getElementById('hero-greeting').textContent = 'Welcome, Viewer';
+    } else {
+      adminElements.forEach(el => el.style.display = '');
+      adminCells.forEach(el => el.style.display = '');
+      document.getElementById('user-initials').textContent = 'JM';
+      document.getElementById('user-display-name').textContent = 'Jagdish Moolya';
+      document.getElementById('user-role-lbl').textContent = 'Admin';
+      document.getElementById('hero-greeting').textContent = 'Good evening, Jagdish';
+    }
+  }
+
+  let appState = JSON.parse(localStorage.getItem('jkil_inventory_state')) || {
+    'Lagoon Project': { total: 0, desk: 0, lap: 0, machines: [] },
+    'Mahalaxmi Vestabule': { total: 0, desk: 0, lap: 0, machines: [] },
+    'MML-7A-CA48-UG': { total: 0, desk: 0, lap: 0, machines: [] }
+  };
+
+  let printerReadings = JSON.parse(localStorage.getItem('jkil_printer_readings')) || [
+    { model: 'Canon iR 3120', tag: 'MML7A-CA-48 -YEB04946', month: 'October 2026', a4bw: '14,250', a4c: '3,100', a3bw: '850', a3c: '210', note: 'Monthly reading logged' },
+    { model: 'Canon iR C3226', tag: 'MML7A-CA-48 -32V04194', month: 'October 2026', a4bw: '19,800', a4c: '7,450', a3bw: '1,400', a3c: '680', note: 'Monthly reading logged' }
+  ];
+
+  let visitPlans = JSON.parse(localStorage.getItem('jkil_visit_plans')) || [
+    { date: '2026-10-02', location: 'LAGOON', purpose: 'Audit' },
+    { date: '2026-10-09', location: 'MCY', purpose: 'Check' }
+  ];
+
+  let activeSiteContext = 'Lagoon Project';
+
+  function saveState() {
+    localStorage.setItem('jkil_inventory_state', JSON.stringify(appState));
+    localStorage.setItem('jkil_printer_readings', JSON.stringify(printerReadings));
+    localStorage.setItem('jkil_visit_plans', JSON.stringify(visitPlans));
+  }
+
+  function clearAllData() {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    if(confirm("Are you sure you want to clear all inventory data?")) {
+      appState = {
+        'Lagoon Project': { total: 0, desk: 0, lap: 0, machines: [] },
+        'Mahalaxmi Vestabule': { total: 0, desk: 0, lap: 0, machines: [] },
+        'MML-7A-CA48-UG': { total: 0, desk: 0, lap: 0, machines: [] }
+      };
+      printerReadings = [];
+      visitPlans = [];
+      saveState();
+      renderDashboard();
+    }
+  }
+
+  function switchView(viewId, title, subtitle) {
+    document.querySelectorAll('.view-section').forEach(view => view.classList.remove('active'));
+    document.getElementById(viewId).classList.add('active');
+    
+    if(title) document.getElementById('top-title').textContent = title;
+    if(subtitle) document.getElementById('top-subtitle').textContent = subtitle;
+
+    document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+    if (viewId === 'view-k7-status') {
+      document.querySelector(`.nav-item[data-target="view-k7-status"]`).classList.add('active');
+      renderK7Report();
+    } else if (viewId === 'view-printer-count') {
+      document.querySelector(`.nav-item[data-target="view-printer-count"]`).classList.add('active');
+      renderPrinterReport();
+    } else if (viewId === 'view-visit-plan') {
+      document.querySelector(`.nav-item[data-target="view-visit-plan"]`).classList.add('active');
+      renderCalendarVisits();
+    } else if (viewId !== 'view-site-details') {
+      const activeNav = document.querySelector(`.nav-item[data-target="${viewId}"]`);
+      if(activeNav) activeNav.classList.add('active');
+    } else {
+      document.querySelector(`.nav-item[data-target="view-dashboard"]`).classList.add('active');
+    }
+  }
+
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = item.getAttribute('data-target');
+      const site = item.getAttribute('data-site');
+
+      if (site) {
+        openSiteDetails(site);
+        document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
+        item.classList.add('active');
+      } else if (target === 'view-k7-status') {
+        switchView('view-k7-status', 'K7 Status Report', 'Security Audit');
+      } else if (target === 'view-printer-count') {
+        switchView('view-printer-count', 'Printer Counter Reports', 'Meter Readings');
+      } else if (target === 'view-visit-plan') {
+        switchView('view-visit-plan', 'Visit Planner', 'Oct 2026 · 25 working days');
+      } else if (target) {
+        switchView(target, item.textContent.trim(), "Overview");
+      }
+    });
+  });
+
+  function renderDashboard() {
+    let globalTotal = 0, globalDesk = 0, globalLap = 0;
+
+    for (const [siteName, data] of Object.entries(appState)) {
+      globalTotal += data.total; globalDesk += data.desk; globalLap += data.lap;
+      
+      let prefix = '';
+      if(siteName.includes('Lagoon')) prefix = 'lagoon';
+      if(siteName.includes('Mahalaxmi')) prefix = 'mahalaxmi';
+      if(siteName.includes('MML')) prefix = 'mml';
+
+      const deskElem = document.getElementById(`card-${prefix}-total`);
+      if (deskElem) {
+        document.getElementById(`card-${prefix}-total`).textContent = data.total;
+        document.getElementById(`card-${prefix}-desk`).textContent = `${data.desk} desktop`;
+        document.getElementById(`card-${prefix}-lap`).textContent = `${data.lap} laptop`;
+        
+        const deskPct = data.total === 0 ? 0 : Math.round((data.desk / data.total) * 100);
+        const lapPct = data.total === 0 ? 0 : Math.round((data.lap / data.total) * 100);
+        document.getElementById(`card-${prefix}-bar-desk`).style.width = `${deskPct}%`;
+        document.getElementById(`card-${prefix}-bar-lap`).style.width = `${lapPct}%`;
+      }
+    }
+
+    const totalElem = document.getElementById('kpi-total');
+    if (totalElem) {
+      totalElem.textContent = globalTotal;
+      document.getElementById('kpi-total-sub').textContent = `${globalDesk} desktop · ${globalLap} laptop`;
+    }
+  }
+
+  function renderK7Report() {
+    const tbody = document.getElementById('k7-report-tbody');
+    tbody.innerHTML = '';
+
+    for (const [siteName, data] of Object.entries(appState)) {
+      const total = data.total;
+      const k7Yes = data.machines.filter(m => m.k7_installed === 'Yes').length;
+      const k7No = total - k7Yes;
+      const rate = total === 0 ? '0%' : `${Math.round((k7Yes / total) * 100)}%`;
+
+      const row = `
+        <tr>
+          <td><div class="user">${siteName}</div></td>
+          <td class="num"><strong>${total}</strong></td>
+          <td class="num" style="color: #166534; font-weight: 600;">${k7Yes}</td>
+          <td class="num" style="color: #991b1b; font-weight: 600;">${k7No}</td>
+          <td class="num"><span class="tag" style="background:#f1f5f9; color:#0f172a;">${rate}</span></td>
+        </tr>
+      `;
+      tbody.innerHTML += row;
+    }
+  }
+
+  function renderPrinterReport() {
+    const container = document.getElementById('printer-cards-container');
+    container.innerHTML = '';
+
+    const printers = [
+      { model: 'Canon iR 3120', tag: 'MML7A-CA-48 -YEB04946' },
+      { model: 'Canon iR C3226', tag: 'MML7A-CA-48 -32V04194' }
+    ];
+
+    printers.forEach(p => {
+      const latestReading = printerReadings.slice().reverse().find(r => r.model === p.model) || {
+        month: 'No report yet', a4bw: '-', a4c: '-', a3bw: '-', a3c: '-'
+      };
+
+      const card = `
+        <div class="printer-card">
+          <div class="printer-card-top">
+            <div style="display:flex; gap:12px; align-items:center;">
+              <div class="printer-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></div>
+              <div>
+                <h3 style="font-size:1rem; font-weight:700;">${p.model}</h3>
+                <p style="font-size:0.75rem; color:var(--text-muted);">${p.tag}</p>
+              </div>
+            </div>
+            <span class="printer-badge">${p.model.includes('C3226') ? 'Colour' : 'B&W'}</span>
+          </div>
+
+          <div class="printer-stats">
+            <div><div class="lbl">Latest Month</div><div class="val" style="font-size:0.8rem;">${latestReading.month}</div></div>
+            <div><div class="lbl">A4 B&amp;W</div><div class="val">${latestReading.a4bw}</div></div>
+          </div>
+
+          <div class="printer-stats">
+            <div><div class="lbl">A4 Colour</div><div class="val">${latestReading.a4c}</div></div>
+            <div><div class="lbl">A3 B&amp;W</div><div class="val">${latestReading.a3bw}</div></div>
+          </div>
+
+          <div class="printer-stats">
+            <div><div class="lbl">A3 Colour</div><div class="val">${latestReading.a3c}</div></div>
+            <div><div class="lbl">Status</div><div class="val" style="color:var(--success);">Online</div></div>
+          </div>
+        </div>
+      `;
+      container.innerHTML += card;
+    });
+  }
+
+  function savePrinterReading() {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    const month = document.getElementById('counter-month').value.trim();
+    const model = document.getElementById('counter-printer-select').value;
+    const a4bw = document.getElementById('counter-a4bw').value.trim() || '-';
+    const a4c = document.getElementById('counter-a4c').value.trim() || '-';
+    const a3bw = document.getElementById('counter-a3bw').value.trim() || '-';
+    const a3c = document.getElementById('counter-a3c').value.trim() || '-';
+    const note = document.getElementById('counter-note').value.trim();
+
+    if (!month) {
+      alert("Please enter reporting month.");
+      return;
+    }
+
+    const tag = model.includes('3120') ? 'MML7A-CA-48 -YEB04946' : 'MML7A-CA-48 -32V04194';
+    printerReadings.push({ model, tag, month, a4bw, a4c, a3bw, a3c, note });
+    saveState();
+    renderPrinterReport();
+
+    document.getElementById('counter-a4bw').value = '';
+    document.getElementById('counter-a4c').value = '';
+    document.getElementById('counter-a3bw').value = '';
+    document.getElementById('counter-a3c').value = '';
+    document.getElementById('counter-note').value = '';
+
+    alert("Printer counter report successfully saved!");
+  }
+
+  function renderCalendarVisits() {
+    for (let i = 1; i <= 31; i++) {
+      const dayStr = i < 10 ? `0${i}` : `${i}`;
+      const cell = document.getElementById(`pills-2026-10-${dayStr}`);
+      if (cell) cell.innerHTML = '';
+    }
+
+    const role = localStorage.getItem('jkil_user_role') || 'admin';
+    visitPlans.forEach((v, index) => {
+      const cell = document.getElementById(`pills-${v.date}`);
+      if (cell) {
+        let pill = '';
+        if (role === 'admin') {
+          pill = `
+            <div class="visit-pill" onclick="event.stopPropagation(); editVisitPlan(${index})">
+              <span>${v.location}</span>
+              <button onclick="event.stopPropagation(); deleteVisitPlan(${index})">×</button>
+            </div>
+          `;
+        } else {
+          pill = `
+            <div class="visit-pill">
+              <span>${v.location}</span>
+            </div>
+          `;
+        }
+        cell.innerHTML += pill;
+      }
+    });
+
+    document.getElementById('visit-count-summary').textContent = `${visitPlans.length} visits planned`;
+  }
+
+  function promptVisitDate(dateStr) {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    const existingIndex = visitPlans.findIndex(v => v.date === dateStr);
+    let currentVal = existingIndex !== -1 ? visitPlans[existingIndex].location : '';
+
+    const location = prompt(`Plan or modify visit for ${dateStr}\nEnter location/site name (leave blank to remove):`, currentVal);
+    
+    if (location !== null) {
+      if (location.trim() === '') {
+        if (existingIndex !== -1) visitPlans.splice(existingIndex, 1);
+      } else {
+        if (existingIndex !== -1) {
+          visitPlans[existingIndex].location = location.trim().toUpperCase();
+        } else {
+          visitPlans.push({ date: dateStr, location: location.trim().toUpperCase(), purpose: 'Scheduled visit' });
+        }
+      }
+      saveState();
+      renderCalendarVisits();
+    }
+  }
+
+  function editVisitPlan(index) {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    const v = visitPlans[index];
+    const newLoc = prompt(`Modify visit for ${v.date}\nEnter location/site name (leave blank to delete):`, v.location);
+    if (newLoc !== null) {
+      if (newLoc.trim() === '') {
+        visitPlans.splice(index, 1);
+      } else {
+        visitPlans[index].location = newLoc.trim().toUpperCase();
+      }
+      saveState();
+      renderCalendarVisits();
+    }
+  }
+
+  function openVisitModal() {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    const dateStr = prompt("Enter visit date (YYYY-MM-DD, e.g. 2026-10-15):", "2026-10-15");
+    if (!dateStr) return;
+    promptVisitDate(dateStr);
+  }
+
+  function deleteVisitPlan(index) {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    visitPlans.splice(index, 1);
+    saveState();
+    renderCalendarVisits();
+  }
+
+  function openSiteDetails(siteName) {
+    activeSiteContext = siteName;
+    const data = appState[siteName];
+    const role = localStorage.getItem('jkil_user_role') || 'admin';
+    
+    document.getElementById('dynamic-site-name').textContent = siteName;
+    const tbody = document.getElementById('dynamic-site-table');
+    tbody.innerHTML = ''; 
+
+    if (data.total === 0) {
+      document.getElementById('dynamic-site-count').textContent = `No inventory records for this site yet.`;
+      tbody.innerHTML = `<tr><td colspan="13" style="text-align:center; padding:3rem; color:var(--text-muted);">No records found.</td></tr>`;
+    } else {
+      document.getElementById('dynamic-site-count').textContent = `Showing ${data.total} inventory allocations.`;
+      
+      data.machines.forEach((m, index) => {
+        const actionBtn = role === 'admin' ? `<button class="btn btn-primary" style="padding: 4px 10px; font-size: 0.75rem;" onclick="openEditDrawer(${index})">Edit</button>` : '';
+        const k7Badge = m.k7_installed === 'Yes' ? '<span class="tag" style="background:#dcfce7; color:#166534; border-color:#bbf7d0;">Yes</span>' : '<span class="tag" style="background:#fee2e2; color:#991b1b; border-color:#fecaca;">No</span>';
+        
+        let row = `
+          <tr>
+            <td>${index + 1}</td>
+            <td class="user">${m.userName}</td>
+            <td>${m.location}</td>
+            <td>${m.departme}</td>
+            <td><span class="tag n">${m.systemType}</span></td>
+            <td>${m.sysModel}</td>
+            <td style="font-family: monospace;">${m.sysSerial}</td>
+            <td>${m.printerModel || '-'}</td>
+            <td>${m.status || 'Working'}</td>
+            <td>${k7Badge}</td>
+            <td style="color:var(--text-muted);">${m.remark || '-'}</td>
+            <td>${m.officeArea || '-'}</td>
+        `;
+        if (role === 'admin') {
+          row += `<td style="text-align: right;">${actionBtn}</td>`;
+        }
+        row += `</tr>`;
+        tbody.innerHTML += row;
+      });
+    }
+    switchView('view-site-details', siteName, 'Site Details');
+  }
+
+  function openNewRecordDrawer() {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    document.getElementById('drawerTitle').textContent = "Add New Inventory Record";
+    document.getElementById('edit-record-index').value = "-1";
+    document.getElementById('edit-officearea').value = "";
+    document.getElementById('edit-username').value = "";
+    document.getElementById('edit-location').value = activeSiteContext || "Lagoon Project";
+    document.getElementById('edit-dept').value = "IT";
+    document.getElementById('edit-systemtype').value = "Desktop";
+    document.getElementById('edit-status').value = "Working";
+    document.getElementById('edit-sysmodel').value = "";
+    document.getElementById('edit-sysserial').value = "";
+    document.getElementById('edit-processor').value = "";
+    document.getElementById('edit-ram').value = "";
+    document.getElementById('edit-hdd').value = "";
+    document.getElementById('edit-k7').value = "Yes";
+    document.getElementById('edit-remark').value = "";
+    document.getElementById('edit-printermodel').value = "";
+    document.getElementById('edit-printerserial').value = "";
+    document.getElementById('edit-upsmodel').value = "";
+    document.getElementById('edit-upsserial').value = "";
+    document.getElementById('edit-xeroxmodel').value = "";
+    document.getElementById('edit-xeroxserial').value = "";
+    document.getElementById('edit-firewallmodel').value = "";
+    document.getElementById('edit-firewallserial').value = "";
+    document.getElementById('edit-scannermodel').value = "";
+    document.getElementById('edit-scannerserial').value = "";
+    document.getElementById('edit-plottermodel').value = "";
+    document.getElementById('edit-plotterserial').value = "";
+
+    document.getElementById('drawer-scrim').classList.add('active');
+    document.getElementById('edit-drawer').classList.add('active');
+  }
+
+  function openNewRecordDrawerForSite() {
+    openNewRecordDrawer();
+  }
+
+  function openEditDrawer(index) {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    const siteData = appState[activeSiteContext];
+    const m = siteData.machines[index];
+
+    document.getElementById('drawerTitle').textContent = `Editing: ${m.userName}`;
+    document.getElementById('edit-record-index').value = index;
+    document.getElementById('edit-officearea').value = m.officeArea || "";
+    document.getElementById('edit-username').value = m.userName || "";
+    document.getElementById('edit-location').value = m.location || activeSiteContext;
+    document.getElementById('edit-dept').value = m.departme || "";
+    document.getElementById('edit-systemtype').value = m.systemType || "Desktop";
+    document.getElementById('edit-status').value = m.status || "Working";
+    document.getElementById('edit-sysmodel').value = m.sysModel || "";
+    document.getElementById('edit-sysserial').value = m.sysSerial || "";
+    document.getElementById('edit-processor').value = m.processor || "";
+    document.getElementById('edit-ram').value = m.ram || "";
+    document.getElementById('edit-hdd').value = m.hdd || "";
+    document.getElementById('edit-k7').value = m.k7_installed || "Yes";
+    document.getElementById('edit-remark').value = m.remark || "";
+    document.getElementById('edit-printermodel').value = m.printerModel || "";
+    document.getElementById('edit-printerserial').value = m.printerSerial || "";
+    document.getElementById('edit-upsmodel').value = m.upsModel || "";
+    document.getElementById('edit-upsserial').value = m.upsSerial || "";
+    document.getElementById('edit-xeroxmodel').value = m.xeroxModel || "";
+    document.getElementById('edit-xeroxserial').value = m.xeroxSerial || "";
+    document.getElementById('edit-firewallmodel').value = m.firewallModel || "";
+    document.getElementById('edit-firewallserial').value = m.firewallSerial || "";
+    document.getElementById('edit-scannermodel').value = m.scannerModel || "";
+    document.getElementById('edit-scannerserial').value = m.scannerSerial || "";
+    document.getElementById('edit-plottermodel').value = m.plotterModel || "";
+    document.getElementById('edit-plotterserial').value = m.plotterSerial || "";
+
+    document.getElementById('drawer-scrim').classList.add('active');
+    document.getElementById('edit-drawer').classList.add('active');
+  }
+
+  function closeDrawer() {
+    document.getElementById('drawer-scrim').classList.remove('active');
+    document.getElementById('edit-drawer').classList.remove('active');
+  }
+
+  function saveDrawerData() {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    const idx = parseInt(document.getElementById('edit-record-index').value);
+    const targetSite = document.getElementById('edit-location').value;
+
+    const record = {
+      officeArea: document.getElementById('edit-officearea').value,
+      userName: document.getElementById('edit-username').value || "Unnamed",
+      location: targetSite,
+      departme: document.getElementById('edit-dept').value,
+      systemType: document.getElementById('edit-systemtype').value,
+      status: document.getElementById('edit-status').value,
+      sysModel: document.getElementById('edit-sysmodel').value,
+      sysSerial: document.getElementById('edit-sysserial').value,
+      processor: document.getElementById('edit-processor').value,
+      ram: document.getElementById('edit-ram').value,
+      hdd: document.getElementById('edit-hdd').value,
+      k7_installed: document.getElementById('edit-k7').value,
+      remark: document.getElementById('edit-remark').value,
+      printerModel: document.getElementById('edit-printermodel').value,
+      printerSerial: document.getElementById('edit-printerserial').value,
+      upsModel: document.getElementById('edit-upsmodel').value,
+      upsSerial: document.getElementById('edit-upsserial').value,
+      xeroxModel: document.getElementById('edit-xeroxmodel').value,
+      xeroxSerial: document.getElementById('edit-xeroxserial').value,
+      firewallModel: document.getElementById('edit-firewallmodel').value,
+      firewallSerial: document.getElementById('edit-firewallserial').value,
+      scannerModel: document.getElementById('edit-scannermodel').value,
+      scannerSerial: document.getElementById('edit-scannerserial').value,
+      plotterModel: document.getElementById('edit-plottermodel').value,
+      plotterSerial: document.getElementById('edit-plotterserial').value
+    };
+
+    if (idx === -1) {
+      if(!appState[targetSite]) appState[targetSite] = { total: 0, desk: 0, lap: 0, machines: [] };
+      appState[targetSite].machines.push(record);
+    } else {
+      if (activeSiteContext !== targetSite) {
+        appState[activeSiteContext].machines.splice(idx, 1);
+        if(!appState[targetSite]) appState[targetSite] = { total: 0, desk: 0, lap: 0, machines: [] };
+        appState[targetSite].machines.push(record);
+      } else {
+        appState[activeSiteContext].machines[idx] = record;
+      }
+    }
+
+    for (const sName in appState) {
+      const s = appState[sName];
+      s.total = s.machines.length;
+      s.desk = s.machines.filter(m => (m.systemType || '').toLowerCase().includes('desktop')).length;
+      s.lap = s.machines.filter(m => (m.systemType || '').toLowerCase().includes('laptop')).length;
+    }
+
+    saveState();
+    closeDrawer();
+    renderDashboard();
+    openSiteDetails(targetSite);
+    alert("Inventory record successfully saved!");
+  }
+
+  let currentImportTarget = "";
+  const fileInput = document.getElementById('global-importer');
+
+  function triggerImport(siteName) {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    currentImportTarget = siteName;
+    fileInput.click();
+  }
+
+  fileInput.addEventListener('change', function(event) {
+    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type: 'array'});
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(worksheet);
+      
+      if (json.length === 0) {
+        alert("The uploaded file contains no data rows.");
+        return;
+      }
+
+      const parsedMachines = json.map((row, index) => {
+        const rawType = row['System Type Desktop \\ Laptop'] || row['System Type Desktop / Laptop'] || row['System Type'] || row['Type'] || 'Desktop';
+        
+        return {
+          officeArea: row['Office / Area'] || row['Office/Area'] || '',
+          userName: row['User Name'] || row['Name'] || `Employee ${index + 1}`,
+          location: row['Location'] || currentImportTarget,
+          departme: row['Department'] || 'IT',
+          systemType: rawType,
+          sysModel: row['Model No'] || row['Model'] || '',
+          sysSerial: row['Serial Number'] || row['Serial'] || '',
+          processor: row['Processor'] || '',
+          ram: row['Ram'] || '',
+          hdd: row['Harddisk'] || '',
+          printerModel: row['Printer Model'] || '',
+          printerSerial: row['Printer Serial Number'] || '',
+          upsModel: row['UPS Model'] || '',
+          upsSerial: row['UPS Serial Number'] || '',
+          xeroxModel: row['Xerox Model'] || '',
+          xeroxSerial: row['Xerox Serial Number'] || '',
+          firewallModel: row['Firewall Model'] || '',
+          firewallSerial: row['Firewall Serial Number'] || '',
+          scannerModel: row['Scanner Model'] || '',
+          scannerSerial: row['Scanner Serial Number'] || '',
+          plotterModel: row['Plotter Model'] || '',
+          plotterSerial: row['Plotter Serial Number'] || '',
+          status: row['Status'] || 'Working',
+          k7_installed: row['K7 Antivirus Installed'] || 'Yes',
+          remark: row['Remark'] || ''
+        };
+      });
+
+      const deskCount = parsedMachines.filter(m => (m.systemType || '').toLowerCase().includes('desktop')).length;
+      const lapCount = parsedMachines.filter(m => (m.systemType || '').toLowerCase().includes('laptop')).length;
+
+      appState[currentImportTarget] = {
+        total: parsedMachines.length,
+        desk: deskCount,
+        lap: lapCount,
+        machines: parsedMachines
+      };
+
+      saveState();
+      renderDashboard();
+      if(document.getElementById('view-site-details').classList.contains('active')) {
+        openSiteDetails(currentImportTarget);
+      }
+      alert(`Successfully imported ${parsedMachines.length} items (${deskCount} desktops, ${lapCount} laptops) into ${currentImportTarget}!`);
+      event.target.value = "";
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  function triggerExport(siteName) {
+    const headers = [
+      "Sr.No", "User Name", "Location", "Department", "System Type Desktop \\ Laptop", 
+      "Model No", "Serial Number", "Processor", "Ram", "Harddisk", 
+      "Printer Model", "Printer Serial Number", "UPS Model", "UPS Serial Number", 
+      "Xerox Model", "Xerox Serial Number", "Firewall Model", "Firewall Serial Number", 
+      "Scanner Model", "Scanner Serial Number", "Plotter Model", "Plotter Serial Number", 
+      "Status", "K7 Antivirus Installed", "Remark", "Office / Area"
+    ];
+
+    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n";
+
+    let rowsToExport = [];
+    if (siteName === 'All Sites Master') {
+      for(const s in appState) {
+        rowsToExport = rowsToExport.concat(appState[s].machines);
+      }
+    } else if (appState[siteName]) {
+      rowsToExport = appState[siteName].machines;
+    }
+
+    if (rowsToExport.length === 0) {
+      alert("No records available to export.");
+      return;
+    }
+
+    rowsToExport.forEach((m, idx) => {
+      const line = [
+        idx + 1, `"${m.userName || ''}"`, `"${m.location || ''}"`, 
+        `"${m.departme || ''}"`, `"${m.systemType || ''}"`, `"${m.sysModel || ''}"`, 
+        `"${m.sysSerial || ''}"`, `"${m.processor || ''}"`, `"${m.ram || ''}"`, 
+        `"${m.hdd || ''}"`, `"${m.printerModel || ''}"`, `"${m.printerSerial || ''}"`, 
+        `"${m.upsModel || ''}"`, `"${m.upsSerial || ''}"`, `"${m.xeroxModel || ''}"`, 
+        `"${m.xeroxSerial || ''}"`, `"${m.firewallModel || ''}"`, `"${m.firewallSerial || ''}"`, 
+        `"${m.scannerModel || ''}"`, `"${m.scannerSerial || ''}"`, `"${m.plotterModel || ''}"`, 
+        `"${m.plotterSerial || ''}"`, `"${m.status || 'Working'}"`, `"${m.k7_installed || 'Yes'}"`, 
+        `"${m.remark || ''}"`, `"${m.officeArea || ''}"`
+      ].join(",");
+      csvContent += line + "\n";
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${siteName.replace(/[^a-zA-Z0-9]/g, '_')}_Inventory.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+</script>
+
+</body>
+</html>
