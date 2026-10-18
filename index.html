@@ -109,7 +109,6 @@
     
     .side-foot { margin-top: auto; padding: 1rem; border-top: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; font-size: 0.8rem; }
 
-    /* Sidebar Overlay for Mobile */
     .sidebar-overlay {
       position: fixed; inset: 0; background: rgba(15, 23, 42, 0.5); z-index: 99;
       opacity: 0; visibility: hidden; transition: 0.3s;
@@ -711,16 +710,74 @@
 </div>
 
 <!-- ============================================================
-    ROUTER & STATE SCRIPT
+    JSONBIN.IO & APP STATE SCRIPT
     ============================================================ -->
 <script>
-  window.addEventListener('DOMContentLoaded', () => {
+  // ==========================================
+  // JSONBIN.IO CONFIGURATION
+  // ==========================================
+  const JSONBIN_ID = '6ad50b75ffd5d1605376780a';       // e.g. '65f...abc'
+  const JSONBIN_KEY = '$2a$10$d.fPa02Ed82UwgXq2CtkhOTO6IYU5lHagEr77cGMYJVsfU2KdToxK'; // e.g. '$2a$10$...'
+
+  let appState = {
+    'Lagoon Project': { total: 0, desk: 0, lap: 0, machines: [] },
+    'Mahalaxmi Vestabule': { total: 0, desk: 0, lap: 0, machines: [] },
+    'MML-7A-CA48-UG': { total: 0, desk: 0, lap: 0, machines: [] }
+  };
+
+  let printerReadings = [
+    { model: 'Canon iR 3120', tag: 'MML7A-CA-48 -YEB04946', month: 'October 2026', a4bw: '14,250', a4c: '3,100', a3bw: '850', a3c: '210', note: 'Monthly reading logged' },
+    { model: 'Canon iR C3226', tag: 'MML7A-CA-48 -32V04194', month: 'October 2026', a4bw: '19,800', a4c: '7,450', a3bw: '1,400', a3c: '680', note: 'Monthly reading logged' }
+  ];
+
+  let visitPlans = [
+    { date: '2026-10-02', location: 'LAGOON', purpose: 'Audit' },
+    { date: '2026-10-09', location: 'MCY', purpose: 'Check' }
+  ];
+
+  window.addEventListener('DOMContentLoaded', async () => {
     if (localStorage.getItem('jkil_logged_in') === 'true') {
       document.getElementById('login-gate').classList.add('hidden');
       applyRoleUI();
+      await loadFromCloud();
       renderDashboard();
     }
   });
+
+  async function loadFromCloud() {
+    try {
+      const response = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}/latest`, {
+        headers: { 'X-Master-Key': JSONBIN_KEY }
+      });
+      const result = await response.json();
+      if (result && result.record) {
+        if (result.record.inventory_state) appState = result.record.inventory_state;
+        if (result.record.printer_readings) printerReadings = result.record.printer_readings;
+        if (result.record.visit_plans) visitPlans = result.record.visit_plans;
+      }
+    } catch (err) {
+      console.error('Error loading from cloud:', err);
+    }
+  }
+
+  async function saveState() {
+    try {
+      await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_KEY
+        },
+        body: JSON.stringify({
+          inventory_state: appState,
+          printer_readings: printerReadings,
+          visit_plans: visitPlans
+        })
+      });
+    } catch (err) {
+      console.error('Error saving to cloud:', err);
+    }
+  }
 
   function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -729,7 +786,7 @@
     overlay.classList.toggle('active');
   }
 
-  function attemptLogin() {
+  async function attemptLogin() {
     const user = document.getElementById('login-user').value.trim();
     const pass = document.getElementById('login-pass').value.trim();
     const err = document.getElementById('login-error');
@@ -740,6 +797,7 @@
       document.getElementById('login-gate').classList.add('hidden');
       err.style.display = 'none';
       applyRoleUI();
+      await loadFromCloud();
       renderDashboard();
     } else if (user === 'user' && pass === '123') {
       localStorage.setItem('jkil_logged_in', 'true');
@@ -747,6 +805,7 @@
       document.getElementById('login-gate').classList.add('hidden');
       err.style.display = 'none';
       applyRoleUI();
+      await loadFromCloud();
       renderDashboard();
     } else {
       err.style.display = 'block';
@@ -787,33 +846,11 @@
     }
   }
 
-  let appState = JSON.parse(localStorage.getItem('jkil_inventory_state')) || {
-    'Lagoon Project': { total: 0, desk: 0, lap: 0, machines: [] },
-    'Mahalaxmi Vestabule': { total: 0, desk: 0, lap: 0, machines: [] },
-    'MML-7A-CA48-UG': { total: 0, desk: 0, lap: 0, machines: [] }
-  };
-
-  let printerReadings = JSON.parse(localStorage.getItem('jkil_printer_readings')) || [
-    { model: 'Canon iR 3120', tag: 'MML7A-CA-48 -YEB04946', month: 'October 2026', a4bw: '14,250', a4c: '3,100', a3bw: '850', a3c: '210', note: 'Monthly reading logged' },
-    { model: 'Canon iR C3226', tag: 'MML7A-CA-48 -32V04194', month: 'October 2026', a4bw: '19,800', a4c: '7,450', a3bw: '1,400', a3c: '680', note: 'Monthly reading logged' }
-  ];
-
-  let visitPlans = JSON.parse(localStorage.getItem('jkil_visit_plans')) || [
-    { date: '2026-10-02', location: 'LAGOON', purpose: 'Audit' },
-    { date: '2026-10-09', location: 'MCY', purpose: 'Check' }
-  ];
-
   let activeSiteContext = 'Lagoon Project';
 
-  function saveState() {
-    localStorage.setItem('jkil_inventory_state', JSON.stringify(appState));
-    localStorage.setItem('jkil_printer_readings', JSON.stringify(printerReadings));
-    localStorage.setItem('jkil_visit_plans', JSON.stringify(visitPlans));
-  }
-
-  function clearAllData() {
+  async function clearAllData() {
     if(localStorage.getItem('jkil_user_role') === 'user') return;
-    if(confirm("Are you sure you want to clear all inventory data?")) {
+    if(confirm("Are you sure you want to clear all inventory data from the cloud?")) {
       appState = {
         'Lagoon Project': { total: 0, desk: 0, lap: 0, machines: [] },
         'Mahalaxmi Vestabule': { total: 0, desk: 0, lap: 0, machines: [] },
@@ -821,7 +858,7 @@
       };
       printerReadings = [];
       visitPlans = [];
-      saveState();
+      await saveState();
       renderDashboard();
     }
   }
@@ -978,7 +1015,7 @@
     });
   }
 
-  function savePrinterReading() {
+  async function savePrinterReading() {
     if(localStorage.getItem('jkil_user_role') === 'user') return;
     const month = document.getElementById('counter-month').value.trim();
     const model = document.getElementById('counter-printer-select').value;
@@ -995,7 +1032,7 @@
 
     const tag = model.includes('3120') ? 'MML7A-CA-48 -YEB04946' : 'MML7A-CA-48 -32V04194';
     printerReadings.push({ model, tag, month, a4bw, a4c, a3bw, a3c, note });
-    saveState();
+    await saveState();
     renderPrinterReport();
 
     document.getElementById('counter-a4bw').value = '';
@@ -1004,7 +1041,7 @@
     document.getElementById('counter-a3c').value = '';
     document.getElementById('counter-note').value = '';
 
-    alert("Printer counter report successfully saved!");
+    alert("Printer counter report successfully saved to cloud!");
   }
 
   function renderCalendarVisits() {
@@ -1040,7 +1077,7 @@
     document.getElementById('visit-count-summary').textContent = `${visitPlans.length} visits planned`;
   }
 
-  function promptVisitDate(dateStr) {
+  async function promptVisitDate(dateStr) {
     if(localStorage.getItem('jkil_user_role') === 'user') return;
     const existingIndex = visitPlans.findIndex(v => v.date === dateStr);
     let currentVal = existingIndex !== -1 ? visitPlans[existingIndex].location : '';
@@ -1057,12 +1094,12 @@
           visitPlans.push({ date: dateStr, location: location.trim().toUpperCase(), purpose: 'Scheduled visit' });
         }
       }
-      saveState();
+      await saveState();
       renderCalendarVisits();
     }
   }
 
-  function editVisitPlan(index) {
+  async function editVisitPlan(index) {
     if(localStorage.getItem('jkil_user_role') === 'user') return;
     const v = visitPlans[index];
     const newLoc = prompt(`Modify visit for ${v.date}\nEnter location/site name (leave blank to delete):`, v.location);
@@ -1072,7 +1109,7 @@
       } else {
         visitPlans[index].location = newLoc.trim().toUpperCase();
       }
-      saveState();
+      await saveState();
       renderCalendarVisits();
     }
   }
@@ -1084,10 +1121,10 @@
     promptVisitDate(dateStr);
   }
 
-  function deleteVisitPlan(index) {
+  async function deleteVisitPlan(index) {
     if(localStorage.getItem('jkil_user_role') === 'user') return;
     visitPlans.splice(index, 1);
-    saveState();
+    await saveState();
     renderCalendarVisits();
   }
 
@@ -1140,7 +1177,7 @@
     switchView('view-site-details', siteName, 'Site Details');
   }
 
-  function deleteRecord(index) {
+  async function deleteRecord(index) {
     if(localStorage.getItem('jkil_user_role') === 'user') return;
     const siteData = appState[activeSiteContext];
     const item = siteData.machines[index];
@@ -1152,7 +1189,7 @@
       siteData.desk = siteData.machines.filter(m => (m.systemType || '').toLowerCase().includes('desktop')).length;
       siteData.lap = siteData.machines.filter(m => (m.systemType || '').toLowerCase().includes('laptop')).length;
       
-      saveState();
+      await saveState();
       renderDashboard();
       openSiteDetails(activeSiteContext);
     }
@@ -1240,7 +1277,7 @@
 
   let isSaving = false;
 
-  function saveDrawerData() {
+  async function saveDrawerData() {
     if (localStorage.getItem('jkil_user_role') === 'user') return;
     if (isSaving) return;
     
@@ -1302,7 +1339,7 @@
       s.lap = s.machines.filter(m => (m.systemType || '').toLowerCase().includes('laptop')).length;
     }
 
-    saveState();
+    await saveState();
     closeDrawer();
     renderDashboard();
     openSiteDetails(targetSite);
@@ -1315,7 +1352,7 @@
       }
     }, 300);
 
-    alert("Inventory record successfully saved!");
+    alert("Inventory record successfully saved to cloud!");
   }
 
   let currentImportTarget = "";
@@ -1333,7 +1370,7 @@
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, {type: 'array'});
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -1386,12 +1423,12 @@
         machines: parsedMachines
       };
 
-      saveState();
+      await saveState();
       renderDashboard();
       if(document.getElementById('view-site-details').classList.contains('active')) {
         openSiteDetails(currentImportTarget);
       }
-      alert(`Successfully imported ${parsedMachines.length} items (${deskCount} desktops, ${lapCount} laptops) into ${currentImportTarget}!`);
+      alert(`Successfully imported ${parsedMachines.length} items to cloud into ${currentImportTarget}!`);
       event.target.value = "";
     };
     reader.readAsArrayBuffer(file);
