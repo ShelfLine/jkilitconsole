@@ -240,11 +240,11 @@
   <div class="login-box">
     <div>
       <h2>JKIL IT Asset Console</h2>
-      <p>Enter your credentials to access the dashboard.</p>
+      <p>Enter credentials (admin / 8451 or user / 123).</p>
     </div>
     <div class="form-group">
       <label>Login ID</label>
-      <input type="text" id="login-user" placeholder="Enter Login ID (admin or user)">
+      <input type="text" id="login-user" placeholder="Enter Login ID">
     </div>
     <div class="form-group">
       <label>Password</label>
@@ -334,7 +334,7 @@
   </div>
   <div class="drawer-foot">
     <button class="btn btn-ghost" onclick="closeDrawer()">Cancel</button>
-    <button class="btn btn-primary" onclick="saveDrawerData()">Save Record</button>
+    <button class="btn btn-primary" id="save-record-btn" onclick="saveDrawerData()">Save Record</button>
   </div>
 </aside>
 
@@ -1087,7 +1087,6 @@
     if(confirm(`Are you sure you want to delete the record for "${item.userName}"?`)) {
       siteData.machines.splice(index, 1);
       
-      // Recalculate totals for the site
       siteData.total = siteData.machines.length;
       siteData.desk = siteData.machines.filter(m => (m.systemType || '').toLowerCase().includes('desktop')).length;
       siteData.lap = siteData.machines.filter(m => (m.systemType || '').toLowerCase().includes('laptop')).length;
@@ -1178,8 +1177,19 @@
     document.getElementById('edit-drawer').classList.remove('active');
   }
 
+  let isSaving = false; // Prevent multiple concurrent submissions
+
   function saveDrawerData() {
-    if(localStorage.getItem('jkil_user_role') === 'user') return;
+    if (localStorage.getItem('jkil_user_role') === 'user') return;
+    if (isSaving) return;
+    
+    isSaving = true;
+    const saveBtn = document.getElementById('save-record-btn');
+    if (saveBtn) {
+      saveBtn.textContent = "Saving...";
+      saveBtn.disabled = true;
+    }
+
     const idx = parseInt(document.getElementById('edit-record-index').value);
     const targetSite = document.getElementById('edit-location').value;
 
@@ -1235,6 +1245,15 @@
     closeDrawer();
     renderDashboard();
     openSiteDetails(targetSite);
+    
+    setTimeout(() => {
+      isSaving = false;
+      if (saveBtn) {
+        saveBtn.textContent = "Save Record";
+        saveBtn.disabled = false;
+      }
+    }, 300);
+
     alert("Inventory record successfully saved!");
   }
 
